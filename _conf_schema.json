@@ -1,0 +1,14 @@
+{
+  "support_image_path": {
+    "description": "用户打赏支持时发送的打赏二维码本地路径",
+    "type": "string",
+    "hint": "输入打赏二维码的本地文件路径，默认使用support_image.png",
+    "default": "support_image.png"
+  },
+  "support_thank_text": {
+    "description": "用户打赏支持时发送的感谢文本",
+    "type": "string",
+    "hint": "输入打赏支持时的感谢文本，默认使用'已成功发送打赏二维码，十分感谢！'",
+    "default": "已成功发送打赏二维码，十分感谢！"
+  }
+}

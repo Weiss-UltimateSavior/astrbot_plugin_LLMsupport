@@ -1,5 +1,5 @@
 name: astrbot_plugin_LLMsupport # 这是你的插件的唯一识别名。
-desc: 当LLM收到用户打赏请客支持的意图时，发送打赏二维码。 # 插件简短描述
+desc: 对话表示想要支持打赏请客意图时，LLM表示感谢并亮出二维码。 # 插件简短描述
 version: v1.1.0 # 插件版本号。格式：v1.1.1 或者 v1.1
 author: 雷诺哈特 # 作者
 repo: https://github.com/Weiss-UltimateSavior/astrbot_plugin_LLMsupport

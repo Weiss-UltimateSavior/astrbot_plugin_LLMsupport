@@ -5,7 +5,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 
-@register("astrbot_plugin_SupportImage", "雷诺哈特", "用户打赏请客支持时发送打赏二维码", "1.1.0")
+@register("astrbot_plugin_LLMsupport", "雷诺哈特", "用户打赏请客支持时发送打赏二维码", "1.1.0")
 class SupportImagePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)

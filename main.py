@@ -21,23 +21,37 @@ class SupportImagePlugin(Star):
         # 使用 realpath 解析所有符号链接，防止路径遍历攻击
         abs_plugin_dir = os.path.realpath(self.plugin_dir)
         
+        # 无论绝对/相对路径，都先拼接再解析，确保路径安全
         if not os.path.isabs(image_path):
-            self.support_image_path = os.path.join(abs_plugin_dir, image_path)
+            # 相对路径：先拼接到插件目录
+            temp_path = os.path.join(abs_plugin_dir, image_path)
         else:
-            # 绝对路径需要检查是否在允许的目录内
-            # 只允许插件目录内的文件
-            abs_image_path = os.path.realpath(image_path)
-            
-            # 使用 startswith 检查路径是否在插件目录内
-            # 确保路径以插件目录开头，防止路径遍历攻击
-            if not abs_image_path.startswith(abs_plugin_dir + os.sep) and abs_image_path != abs_plugin_dir:
+            # 绝对路径：直接使用
+            temp_path = image_path
+        
+        # 统一解析真实路径（解析符号链接）
+        abs_image_path = os.path.realpath(temp_path)
+        
+        # 使用 commonpath 检查路径是否在插件目录内
+        try:
+            common = os.path.commonpath([abs_plugin_dir, abs_image_path])
+            if common != abs_plugin_dir:
                 logger.error(f"打赏二维码路径不在允许的目录内")
                 self.support_image_path = None
             else:
                 self.support_image_path = abs_image_path
+        except ValueError:
+            # commonpath 在不同驱动器下会抛出 ValueError
+            logger.error(f"打赏二维码路径不在允许的目录内")
+            self.support_image_path = None
         
         # 校验图片路径有效性
         if self.support_image_path:
+            # 检查是否为符号链接（可选安全增强：拒绝符号链接）
+            if os.path.islink(self.support_image_path):
+                logger.warning(f"打赏二维码文件是符号链接，已拒绝")
+                self.support_image_path = None
+            
             # 校验文件扩展名
             allowed_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
             ext = os.path.splitext(self.support_image_path)[1].lower()
@@ -96,7 +110,7 @@ class SupportImagePlugin(Star):
         logger.info("收到打赏支持意图，准备发送打赏二维码...")
         
         try:
-            # 解析发送者ID，增加空值保护
+            # 解析发送者 ID，增加空值保护
             raw_sender_id = None
             if hasattr(event, 'message_obj') and event.message_obj:
                 if hasattr(event.message_obj, 'sender') and event.message_obj.sender:
@@ -104,7 +118,9 @@ class SupportImagePlugin(Star):
                         raw_sender_id = event.message_obj.sender.user_id
             
             sender_id = self._normalize_user_id(raw_sender_id)
-            logger.info(f"打赏支持意图发送者: 原始ID={raw_sender_id}, 规范化ID={sender_id}")
+            masked_id = self._mask_user_id(sender_id)
+            logger.debug(f"打赏支持意图发送者：原始 ID={raw_sender_id}, 规范化 ID={sender_id}")
+            logger.info(f"打赏支持意图发送者：{masked_id}")
             
             # 检查图片路径是否有效
             if not self.support_image_path:
@@ -117,10 +133,16 @@ class SupportImagePlugin(Star):
                 yield result
             logger.info(f"已向用户 {sender_id} 发送打赏二维码")
             
-            # 返回提示，让LLM表示感谢
+            # 返回提示，让 LLM 表示感谢
             yield event.plain_result(self.support_thank_text)
+        except FileNotFoundError:
+            logger.exception(f"发送打赏二维码时发生错误：文件不存在")
+            yield event.plain_result("抱歉，发送打赏二维码时发生错误，请稍后重试")
+        except PermissionError:
+            logger.exception(f"发送打赏二维码时发生错误：权限不足")
+            yield event.plain_result("抱歉，发送打赏二维码时发生错误，请稍后重试")
         except Exception as e:
-            logger.error(f"发送打赏二维码时发生错误: {str(e)}")
+            logger.exception(f"发送打赏二维码时发生错误：{e}")
             yield event.plain_result("抱歉，发送打赏二维码时发生错误，请稍后重试")
 
     async def _send_support_image(self, event: AstrMessageEvent):
@@ -129,24 +151,43 @@ class SupportImagePlugin(Star):
             image_filename = os.path.basename(self.support_image_path)
             yield event.image_result(self.support_image_path)
             logger.debug(f"打赏二维码已发送：{image_filename}")
+        except FileNotFoundError:
+            logger.exception(f"发送图片失败：文件不存在")
+            raise
+        except PermissionError:
+            logger.exception(f"发送图片失败：权限不足")
+            raise
+        except OSError as e:
+            logger.exception(f"发送图片失败：{e}")
+            raise
         except Exception as e:
-            logger.error(f"发送图片失败：{str(e)}")
+            logger.exception(f"发送图片失败：{e}")
             raise
 
+    def _mask_user_id(self, user_id):
+        """对用户 ID 进行脱敏处理，仅保留后 4 位"""
+        if user_id is None:
+            return "未知"
+        user_id_str = str(user_id)
+        if len(user_id_str) <= 4:
+            return user_id_str
+        return "****" + user_id_str[-4:]
+    
     def _normalize_user_id(self, user_id):
         """统一用户 ID 格式（处理整数/字符串）"""
         original = user_id
         if isinstance(user_id, int):
             normalized = str(user_id)
         elif isinstance(user_id, str):
-            # 只在明确检测到"平台前缀_真实 ID"格式时再拆分
-            # 避免误伤包含下划线的合法 ID
+            # 只在明确检测到常见平台前缀格式时再拆分
+            # 支持的平台前缀：qq, wechat, weixin, telegram, tg, discord, slack
+            known_prefixes = {'qq', 'wechat', 'weixin', 'telegram', 'tg', 'discord', 'slack'}
             parts = user_id.split("_")
-            if len(parts) == 2 and parts[0].isalpha() and parts[1]:
-                # 假设格式为"平台_ID"，如"qq_123456"或"wechat_789012"
+            if len(parts) == 2 and parts[0].lower() in known_prefixes and parts[1]:
+                # 格式为"平台_ID"，如"qq_123456"或"wechat_789012"
                 normalized = parts[-1].strip()
             else:
-                # 其他情况保留原值
+                # 其他情况保留原值，避免误伤合法 ID
                 normalized = user_id
         else:
             normalized = str(user_id)
@@ -180,13 +221,32 @@ class SupportImagePlugin(Star):
                 return True
             
             return False
-        except Exception:
-            logger.debug(f"图片文件头验证失败")
+        except FileNotFoundError:
+            logger.debug(f"图片文件头验证失败：文件不存在")
+            return False
+        except PermissionError:
+            logger.debug(f"图片文件头验证失败：权限不足")
+            return False
+        except OSError as e:
+            logger.debug(f"图片文件头验证失败：{e}")
+            return False
+        except Exception as e:
+            logger.exception(f"图片文件头验证发生未预期错误：{e}")
             return False
     
     def _get_file_size(self, file_path):
         """获取文件大小（字节）"""
         try:
             return os.path.getsize(file_path)
-        except Exception:
+        except FileNotFoundError:
+            logger.debug(f"获取文件大小失败：文件不存在")
+            return 0
+        except PermissionError:
+            logger.debug(f"获取文件大小失败：权限不足")
+            return 0
+        except OSError as e:
+            logger.debug(f"获取文件大小失败：{e}")
+            return 0
+        except Exception as e:
+            logger.exception(f"获取文件大小发生未预期错误：{e}")
             return 0

@@ -1,14 +1,14 @@
 {
   "support_image_path": {
-    "description": "用户打赏支持时发送的打赏二维码本地路径",
+    "description": "用户打赏支持时发送的打赏二维码本地路径（仅支持插件目录内路径，拒绝符号链接）",
     "type": "string",
-    "hint": "输入打赏二维码的本地文件路径，默认使用support_image.png",
+    "hint": "支持 png/jpg/jpeg/gif/webp 格式，最大 10MB。仅允许插件目录内的相对路径或绝对路径",
     "default": "support_image.png"
   },
   "support_thank_text": {
     "description": "用户打赏支持时发送的感谢文本",
     "type": "string",
-    "hint": "输入打赏支持时的感谢文本，默认使用'已成功发送打赏二维码，十分感谢！'",
+    "hint": "输入打赏支持时的感谢文本，不能为空",
     "default": "已成功发送打赏二维码，十分感谢！"
   }
 }

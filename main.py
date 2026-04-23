@@ -6,7 +6,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 
-@register("astrbot_plugin_LLMsupport", "雷诺哈特", "用户打赏请客支持时发送打赏二维码", "1.1.0")
+@register("astrbot_plugin_LLMsupport", "雷诺哈特", "用户打赏请客支持时发送打赏二维码", "v1.1.0")
 class SupportImagePlugin(Star):
     MAX_FILE_SIZE = 10 * 1024 * 1024
     ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
@@ -178,6 +178,8 @@ class SupportImagePlugin(Star):
     
     def _normalize_user_id(self, user_id: Optional[str | int]) -> str:
         """统一用户 ID 格式（处理整数/字符串）"""
+        if user_id is None:
+            return "unknown"
         original = user_id
         if isinstance(user_id, int):
             normalized = str(user_id)
